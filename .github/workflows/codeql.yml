@@ -15,10 +15,12 @@ name: codeql
 # pull_request_target misuse, untrusted input interpolated through ${{ }}
 # into run: scripts, and over-privileged jobs.
 #
-# The weekly cron is not redundant with push: CodeQL's query packs are updated
-# continuously, and a new query only ever runs against code that has changed
-# since it shipped. Without the cron, a rule published today would never be
-# applied to a file last touched last year.
+# The weekly cron is not redundant with push: every run analyses the whole
+# repository with the query pack current when it starts, so a push to
+# `master` already applies newly published queries to files untouched for
+# a year. The cron exists for the opposite case — when no push happens for
+# a while and newly published queries would otherwise wait for the next
+# push to be applied at all.
 
 on:
   workflow_call:
