@@ -1,8 +1,8 @@
-"""Structure pins over ratchet-push.yml, related across the two workflows.
+"""Structure pins over ratchet-push.yml across the two workflows.
 
 The run-id fallback is pinned behaviourally: the listing step's script
-runs under bash -e against a stub `gh` that records the artifacts
-endpoint it was called with (the pattern of tests/test_tag_waiter.py).
+runs under bash -e against a stub `gh` recording the artifacts
+endpoint it was called with (as in tests/test_tag_waiter.py).
 """
 import os
 import re
@@ -24,7 +24,7 @@ def _workflow() -> dict[str, Any]:
 
 
 def _triggers(workflow: dict[str, Any]) -> dict[str, Any]:
-    # PyYAML's YAML 1.1 loader reads an unquoted `on` key as True.
+    # PyYAML's YAML 1.1 loader reads unquoted `on` as True.
     return workflow.get("on", workflow.get(True, {}))
 
 
@@ -39,7 +39,7 @@ def _step(name: str) -> dict[str, Any]:
 
 
 def _conjuncts(expression: str) -> set[str]:
-    # One conjunction: a disjunction would widen the admission set.
+    # A disjunction would widen the admission set.
     body = expression.strip()
     if body.startswith("${{") and body.endswith("}}"):
         body = body[3:-2].strip()
@@ -56,8 +56,7 @@ def test_the_trigger_keys_on_the_gate_workflow_itself() -> None:
 
 
 def test_the_push_job_admits_only_green_master_pushes() -> None:
-    # The measure step exits 0 even when tests fail, so the green-only
-    # guarantee lives in this admission set, exactly.
+    # The measure step exits 0 even when tests fail: green-only lives here.
     assert _conjuncts(_push_job()["if"]) == {
         "github.event.workflow_run.event == 'push'",
         "github.event.workflow_run.head_branch == 'master'",
@@ -74,8 +73,8 @@ def test_the_push_job_runs_in_the_master_push_environment() -> None:
 
 def test_the_push_never_cancels_a_run_mid_push() -> None:
     concurrency = _workflow()["concurrency"]
-    # Keyed on the triggering run, so a pull request's completion can never
-    # supersede a pending master raise.
+    # Keyed on the triggering run: a pull request cannot supersede a
+    # pending master raise.
     for field in ("event", "head_branch"):
         assert f"github.event.workflow_run.{field}" in concurrency["group"]
     assert concurrency["cancel-in-progress"] is False
@@ -93,9 +92,8 @@ def test_the_listing_step_sets_only_the_prefixed_run_id_variable() -> None:
 def _bash() -> str:
     if os.name != "nt":
         return "bash"
-    # On Windows the first bash on PATH is the WSL launcher, which cannot
-    # run Windows-path arguments; the workflow scripts need Git for
-    # Windows' bash.
+    # The first bash on PATH under Windows is the WSL launcher, which
+    # cannot run Windows-path arguments.
     git = shutil.which("git")
     assert git, "Git for Windows supplies the bash that runs workflow scripts"
     return next(str(candidate) for ancestor in Path(git).parents
@@ -108,7 +106,7 @@ def _run_list_step(tmp_path: Path,
                    workflow_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     step = _step("List the triggering run's artifacts")
     script = tmp_path / "step.sh"
-    # LF: bash rejects the carriage returns write_text emits on Windows.
+    # LF: bash rejects the CRLF write_text emits on Windows.
     script.write_text(step["run"], encoding="utf-8", newline="\n")
     gh = tmp_path / "gh"
     gh.write_text("""#!/usr/bin/env bash
@@ -139,8 +137,6 @@ done
 def test_the_run_id_reaches_the_artifacts_url(
         tmp_path: Path, workflow_env: dict[str, str],
         expected_run_id: str) -> None:
-    # The prefixed name wins when both are set; the old name alone still
-    # reaches the endpoint.
     result = _run_list_step(tmp_path, workflow_env)
     assert result.returncode == 0, result.stdout + result.stderr
     log = (tmp_path / "gh-calls.log").read_text(encoding="utf-8").splitlines()
@@ -149,9 +145,8 @@ def test_the_run_id_reaches_the_artifacts_url(
 
 
 def test_the_deploy_key_is_prefixed_and_falls_back_to_the_old_secret() -> None:
-    # GitHub's || is falsy-on-empty: both secrets set -> the prefixed
-    # name wins; only the old one set -> it still authenticates. The old
-    # name survives only inside the fallback, never as its own variable.
+    # GitHub's || is falsy-on-empty: both secrets set -> the prefixed name
+    # wins; the old one alone still authenticates, never as its own variable.
     env = _step("Push the raise commit to master")["env"]
     # The secret cannot be run locally; check the names and their order.
     expression = env["DOCS_HUB_MASTER_PUSH_DEPLOY_KEY"]
@@ -192,7 +187,7 @@ def test_the_push_step_consumes_exactly_the_staged_files() -> None:
     push = _step("Push the raise commit to master")["run"]
     staged = set(re.findall(r'out / "([^"]+)"', stager))
     consumed = set(re.findall(r"raise-data/([A-Za-z0-9._-]+)", push))
-    # Both directions: every staged file is read, and nothing else is.
+    # Both directions: every staged file is read, none other.
     assert staged and staged == consumed
 
 
@@ -204,8 +199,8 @@ def test_the_push_step_runs_the_fetched_trees_own_ratchet() -> None:
     command = next(line for line in joined.splitlines() if "ratchet.py" in line)
     tokens = command.split()
     script = next(token for token in tokens if token.endswith("scripts/ci/ratchet.py"))
-    # The script and the document it rewrites both live in the fetched tree,
-    # executed isolated, restating the staleness inputs.
+    # Script and thresholds document both live in the fetched tree, run
+    # isolated.
     assert clone in script
     assert clone in tokens[tokens.index("--thresholds") + 1]
     assert tokens[tokens.index("python3") + 1] == "-I"
